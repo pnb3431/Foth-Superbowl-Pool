@@ -20,6 +20,16 @@ npm run dev    # the real Firebase project
 npm test       # payout math, plus ESPN parsing against last year's real Super Bowl
 ```
 
+## Publishing an update
+
+The site isn't connected to GitHub, so it's built on this Mac and uploaded:
+
+```bash
+npx vite build && npx netlify-cli deploy --prod --no-build --dir dist --functions netlify/functions --site 0f7751fc-413f-4d24-af89-937e6dabc931
+```
+
+Keep `--no-build`. The Firebase API key is marked secret in Netlify, so a build run by the Netlify tool only sees it masked (`****`), and the page can't connect.
+
 ## Going live (one time)
 
 1. **Security rules.** Both sites share one rules file, which lives in `~/foth-packer-pools/firestore.rules`. The Super Bowl block is already added there. Deploy it from that folder with `npx firebase-tools deploy --only firestore:rules`.
