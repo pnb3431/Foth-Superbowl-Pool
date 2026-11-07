@@ -13,7 +13,7 @@ import SquareGrid from './components/SquareGrid';
 import Modals from './components/Modals';
 import {
   PERIODS, DEFAULT_GRIDS, emptyScores, shuffledNumbers, isRevealed, hasScore,
-  computeResults, currentPeriod, soldCount, personKey, cleanName, formatMoney
+  computeResults, soldCount, personKey, cleanName, formatMoney
 } from './utils/pool';
 import { findSuperBowl, teamsFromEvent, finishedPeriodScores } from './utils/espn';
 import { teamInfo } from './utils/teams';
@@ -88,8 +88,6 @@ const App = () => {
   const [contactsSnap, setContactsSnap] = useState({});
 
   const [currentGridId, setCurrentGridId] = useState(GRID_IDS.includes(_initParams.get('grid')) ? _initParams.get('grid') : GRID_IDS[0]);
-  // Only set when the visitor picks a period; otherwise follows the game.
-  const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [adminSquare, setAdminSquare] = useState(null);
   const [inspectedSquare, setInspectedSquare] = useState(null);
@@ -121,7 +119,6 @@ const App = () => {
   const revealed = isRevealed(grid);
   const topTeam = teamInfo(game?.top, 'top');
   const sideTeam = teamInfo(game?.side, 'side');
-  const period = selectedPeriod || currentPeriod(scores);
 
   // URL Sync — only pin the grid and year in the URL when they aren't the defaults.
   useEffect(() => {
@@ -591,8 +588,6 @@ const App = () => {
           signupsOpen={signupsOpen}
           isAdmin={isAdmin}
           isLocked={isLocked}
-          period={period}
-          setPeriod={setSelectedPeriod}
           scores={scores}
           results={results}
           topTeam={topTeam}
