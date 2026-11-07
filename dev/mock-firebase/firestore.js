@@ -45,6 +45,9 @@ export const onSnapshot = (ref, next) => {
   return () => listeners.delete(listener);
 };
 
+export const getDocFromServer = async (ref) => docSnap(ref.path);
+export const getDocsFromServer = async (ref) => collectionSnap(ref.path);
+
 export const setDoc = async (ref, data, options) => { write(ref.path, data, options); emit(); };
 export const updateDoc = async (ref, data) => { write(ref.path, data, { update: true }); emit(); };
 

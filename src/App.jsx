@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, runTransaction, writeBatch, getDocFromServer, getDocsFromServer } from 'firebase/firestore';
 import { CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import Header from './components/Header';
 import GridPicker from './components/GridPicker';
@@ -152,12 +152,7 @@ const App = () => {
   // 2. Global config (active year, payment links)
   useEffect(() => {
     if (!user) return;
-    const canSeed = !user.isAnonymous;
     const unsubSettings = onSnapshot(globalConfigDoc('settings'), (snap) => {
-      if (!snap.exists() && canSeed && !snap.metadata.fromCache) {
-        setDoc(globalConfigDoc('settings'), { activeYear: DEFAULT_YEAR }, { merge: true })
-          .catch(err => console.error("Error seeding settings:", err));
-      }
       setSettings(snap.exists() ? snap.data() : { activeYear: DEFAULT_YEAR });
     }, (err) => {
       console.error("Error fetching settings:", err);
@@ -172,12 +167,7 @@ const App = () => {
   // 3. Year data: game info, scores, grid settings
   useEffect(() => {
     if (!user || !settings) return;
-    const canSeed = !user.isAnonymous && !isLocked;
     const unsubGame = onSnapshot(yearConfigDoc(year, 'game'), (snap) => {
-      if (!snap.exists() && canSeed && !snap.metadata.fromCache) {
-        setDoc(yearConfigDoc(year, 'game'), { date: SUPER_BOWL_DATES[year] || '', top: '', side: '' }, { merge: true })
-          .catch(err => console.error("Error seeding game:", err));
-      }
       setGameSnap({ key: year, value: snap.exists() ? snap.data() : { date: SUPER_BOWL_DATES[year] || '', top: '', side: '' } });
     }, (err) => console.error("Error fetching game:", err));
 
@@ -186,23 +176,11 @@ const App = () => {
     }, (err) => console.error("Error fetching scores:", err));
 
     const unsubGrids = onSnapshot(gridsCollection(year), (snapshot) => {
-      const data = snapshotToMap(snapshot);
-      // Sign-ups only open once each grid has a saved document (the security rules check it).
-      const missing = GRID_IDS.filter(id => !data[id]);
-      if (missing.length && canSeed && !snapshot.metadata.fromCache && !seeded.current[year]) {
-        seeded.current[year] = true;
-        const batch = writeBatch(db);
-        missing.forEach(id => batch.set(gridDoc(year, id), { ...DEFAULT_GRIDS[id], revealed: false }, { merge: true }));
-        batch.commit().catch(err => {
-          console.error("Error seeding grids:", err);
-          seeded.current[year] = false;
-        });
-      }
-      setGridsSnap({ key: year, value: data });
+      setGridsSnap({ key: year, value: snapshotToMap(snapshot) });
     }, (err) => console.error("Error fetching grids:", err));
 
     return () => { unsubGame(); unsubScores(); unsubGrids(); };
-  }, [user, settings, year, isLocked]);
+  }, [user, settings, year]);
 
   // 4. Squares for every grid (so the picker can show what's left and the finder can search them all)
   useEffect(() => {
@@ -221,6 +199,38 @@ const App = () => {
     }, (err) => console.error(`Error fetching ${id} contacts:`, err)));
     return () => unsubs.forEach(u => u());
   }, [isAdmin, settings, year]);
+
+  // 6. The commissioner's visit creates whatever the year still needs. Sign-ups only work once
+  // the settings and grid documents exist (the security rules check them). This asks the
+  // server directly: a listener can report a cached "missing" and never update.
+  useEffect(() => {
+    if (!isAdmin || !settings || isLocked || seeded.current[year]) return;
+    seeded.current[year] = true;
+    (async () => {
+      const batch = writeBatch(db);
+      let writes = 0;
+      if (!(await getDocFromServer(globalConfigDoc('settings'))).exists()) {
+        batch.set(globalConfigDoc('settings'), { activeYear: year }, { merge: true });
+        writes++;
+      }
+      if (!(await getDocFromServer(yearConfigDoc(year, 'game'))).exists()) {
+        batch.set(yearConfigDoc(year, 'game'), { date: SUPER_BOWL_DATES[year] || '', top: '', side: '' }, { merge: true });
+        writes++;
+      }
+      const existingGrids = new Set((await getDocsFromServer(gridsCollection(year))).docs.map(d => d.id));
+      GRID_IDS.filter(id => !existingGrids.has(id)).forEach(id => {
+        batch.set(gridDoc(year, id), { ...DEFAULT_GRIDS[id], revealed: false }, { merge: true });
+        writes++;
+      });
+      if (writes) {
+        await batch.commit();
+        console.info(`Set up ${writes} missing pool documents for ${year}.`);
+      }
+    })().catch(err => {
+      console.error("Error setting up the pool:", err);
+      seeded.current[year] = false;
+    });
+  }, [isAdmin, settings, year, isLocked]);
 
   const results = useMemo(() => computeResults(grid, scores, squares), [grid, scores, squares]);
 
@@ -284,6 +294,7 @@ const App = () => {
     if (isAdmin && claimed) return setAdminSquare(squareId);
     if (claimed || (revealed && !isAdmin)) return setInspectedSquare(prev => (prev === squareId ? null : squareId));
     if (isLocked) return;
+    if (!savedGrids[currentGridId]) return showToast("Sign-ups for this grid aren't open yet. Check back soon!", 'info');
     setInspectedSquare(null);
     setSelectedSquare(squareId);
   };
