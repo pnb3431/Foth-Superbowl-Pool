@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0B1F3A;
+  --color-navy-light: #1B3358;
+  --color-silver: #C3CAD5;
+  --color-gold: #F2B705;
+}
+
+body {
+  background-color: #EEF1F5;
+  background-image:
+    linear-gradient(to right, rgba(195, 202, 213, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(195, 202, 213, 0.35) 1px, transparent 1px);
+  background-size: 40px 40px;
+}

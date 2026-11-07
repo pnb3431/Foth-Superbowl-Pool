@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Route all requests to index.html for React SPA (client-side routing)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # firebase-admin loads Firestore through an optional dependency that the bundler
+  # would otherwise leave out, so ship these packages as-is.
+  external_node_modules = ["firebase-admin", "@google-cloud/firestore"]
