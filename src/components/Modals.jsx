@@ -25,23 +25,29 @@ function Shell({ title, subtitle, Icon, onClose, children }) {
 // Keeps the form state local so typing doesn't re-render the whole app.
 function ClaimModal({ selectedSquare, setSelectedSquare, grid, handleClaimSquare, savedClaimer }) {
   const [saved] = useState(savedClaimer);
-  const [name, setName] = useState(saved.name || '');
-  const [email, setEmail] = useState(saved.email || '');
-  const [busy, setBusy] = useState(false);
+  // Starts blank so the square never looks taken; one tap fills in last time's details.
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const canReuse = saved.name && saved.email && !(name === saved.name && email === saved.email);
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    setBusy(true);
-    await handleClaimSquare(name, email);
-    setBusy(false);
+    handleClaimSquare(name, email);
   };
 
   return (
     <Shell title={`Claim square #${selectedSquare + 1}`} subtitle={`${grid.name} · ${formatMoney(grid.price)}`} Icon={UserPlus} onClose={() => setSelectedSquare(null)}>
       <form onSubmit={submit} className="p-6 space-y-5">
+        {canReuse && (
+          <button type="button" onClick={() => { setName(saved.name); setEmail(saved.email); }}
+            className="w-full text-left rounded-2xl border-2 border-dashed border-slate-200 px-4 py-3 hover:border-navy">
+            <span className="block text-[11px] font-black uppercase tracking-widest text-slate-500">Use my info</span>
+            <span className="block font-bold text-navy truncate">{saved.name} · {saved.email}</span>
+          </button>
+        )}
         <div>
           <label htmlFor="claimName" className={label}>Full name</label>
-          <input id="claimName" name="claimName" autoComplete="name" autoFocus={!saved.name} required maxLength={100} type="text" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="e.g. Vince Lombardi" />
+          <input id="claimName" name="claimName" autoComplete="name" autoFocus required maxLength={100} type="text" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="e.g. Vince Lombardi" />
         </div>
         <div>
           <label htmlFor="claimEmail" className={label}>Email</label>
@@ -50,8 +56,8 @@ function ClaimModal({ selectedSquare, setSelectedSquare, grid, handleClaimSquare
         </div>
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={() => setSelectedSquare(null)} className="flex-1 py-4 font-bold text-slate-500 uppercase text-xs tracking-widest">Go back</button>
-          <button type="submit" disabled={busy} className="flex-1 py-4 rounded-2xl font-black bg-navy text-gold hover:bg-navy-light shadow-xl uppercase text-xs tracking-[0.2em] disabled:opacity-60">
-            {busy ? 'Claiming…' : 'Claim it'}
+          <button type="submit" className="flex-1 py-4 rounded-2xl font-black bg-navy text-gold hover:bg-navy-light shadow-xl uppercase text-xs tracking-[0.2em]">
+            Claim it
           </button>
         </div>
       </form>

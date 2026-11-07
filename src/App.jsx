@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, runTransaction, writeBatch, getDocFromServer, getDocsFromServer } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, writeBatch, getDocFromServer, getDocsFromServer } from 'firebase/firestore';
 import { CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import Header from './components/Header';
 import GridPicker from './components/GridPicker';
@@ -324,29 +324,30 @@ const App = () => {
     if (selectedSquare === null || !claimName || !claimEmail) return;
     if (isLocked) return showToast("This pool is closed.", 'error');
     if (revealed && !isAdmin) return showToast("Numbers are out, so this grid is closed.", 'error');
+    const squareId = selectedSquare;
+    if (squares[squareId]) return showToast("Someone just took that square!", 'error');
+    const batch = writeBatch(db);
+    batch.set(gridItemDoc(year, currentGridId, 'squares', squareId), {
+      name: claimName,
+      claimedBy: user.uid,
+      timestamp: Date.now(),
+      paid: false
+    });
+    // Email is stored separately so only the commissioner can read it.
+    batch.set(gridItemDoc(year, currentGridId, 'contacts', squareId), { email: claimEmail, claimedBy: user.uid });
+    // The grid shows the square as soon as the write starts; the server confirms it
+    // (or the rules refuse it, e.g. someone else got there first) a moment later.
+    const saving = batch.commit();
+    setSelectedSquare(null);
+    try { localStorage.setItem(SAVED_CLAIMER, JSON.stringify({ name: claimName, email: claimEmail })); } catch { /* private window */ }
     try {
-      const squareRef = gridItemDoc(year, currentGridId, 'squares', selectedSquare);
-      const contactRef = gridItemDoc(year, currentGridId, 'contacts', selectedSquare);
-      await runTransaction(db, async (transaction) => {
-        const sfDoc = await transaction.get(squareRef);
-        if (sfDoc.exists()) {
-          throw "Someone just took that square!";
-        }
-        transaction.set(squareRef, {
-          name: claimName,
-          claimedBy: user.uid,
-          timestamp: Date.now(),
-          paid: false
-        });
-        // Email is stored separately so only the commissioner can read it.
-        transaction.set(contactRef, { email: claimEmail, claimedBy: user.uid });
-      });
-      try { localStorage.setItem(SAVED_CLAIMER, JSON.stringify({ name: claimName, email: claimEmail })); } catch { /* private window */ }
-      setSelectedSquare(null);
-      showToast(`Square #${selectedSquare + 1} is yours!`);
+      await saving;
+      showToast(`Square #${squareId + 1} is yours!`);
     } catch (err) {
       console.error(err);
-      showToast(typeof err === "string" ? err : "Couldn't claim that square. Please try again.", 'error');
+      showToast(err?.code === 'permission-denied'
+        ? `Square #${squareId + 1} couldn't be claimed. Someone may have just taken it. Please pick another.`
+        : "Couldn't claim that square. Please try again.", 'error');
     }
   };
 
